@@ -19,9 +19,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/evanpaul14/huh"
-Repository = "https://github.com/evanpaul14/huh"
-Issues = "https://github.com/evanpaul14/huh/issues"
+Homepage = "https://github.com/evanpaul14/huh-cli"
+Repository = "https://github.com/evanpaul14/huh-cli"
+Issues = "https://github.com/evanpaul14/huh-cli/issues"
 
 [project.scripts]
 huh = "huh.main:cli"
