@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "huh-cli"
 version = "0.1.0"
-description = "CLI rescue tool — suggests the right command when yours fails"
+description = "On-device AI assistant for your terminal"
 requires-python = ">=3.10"
 dependencies = [
     "click>=8.0",
