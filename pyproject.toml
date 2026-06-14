@@ -4,10 +4,19 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "huh-cli"
-version = "0.1.0"
+version = "0.1.1"
 description = "On-device AI assistant for your terminal"
 readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.10"
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+]
+
+[project.urls]
+Homepage = "https://github.com/evanpaul14/huh"
+Repository = "https://github.com/evanpaul14/huh"
+Issues = "https://github.com/evanpaul14/huh/issues"
 dependencies = [
     "click>=8.0",
     "rich>=13.0",
