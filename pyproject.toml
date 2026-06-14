@@ -7,16 +7,9 @@ name = "huh-cli"
 version = "0.1.1"
 description = "On-device AI assistant for your terminal"
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
-classifiers = [
-    "License :: OSI Approved :: MIT License",
-]
-
-[project.urls]
-Homepage = "https://github.com/evanpaul14/huh"
-Repository = "https://github.com/evanpaul14/huh"
-Issues = "https://github.com/evanpaul14/huh/issues"
 dependencies = [
     "click>=8.0",
     "rich>=13.0",
@@ -24,6 +17,11 @@ dependencies = [
     "mlx-lm>=0.18.0; platform_machine == 'arm64' and sys_platform == 'darwin'",
     "llama-cpp-python>=0.2.0; platform_machine != 'arm64' or sys_platform != 'darwin'",
 ]
+
+[project.urls]
+Homepage = "https://github.com/evanpaul14/huh"
+Repository = "https://github.com/evanpaul14/huh"
+Issues = "https://github.com/evanpaul14/huh/issues"
 
 [project.scripts]
 huh = "huh.main:cli"
