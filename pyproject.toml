@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "huh"
+version = "0.1.0"
+description = "CLI rescue tool — suggests the right command when yours fails"
+requires-python = ">=3.10"
+dependencies = [
+    "click>=8.0",
+    "rich>=13.0",
+    "huggingface_hub>=0.23.0",
+    "mlx-lm>=0.18.0; platform_machine == 'arm64' and sys_platform == 'darwin'",
+    "llama-cpp-python>=0.2.0; platform_machine != 'arm64' or sys_platform != 'darwin'",
+]
+
+[project.scripts]
+huh = "huh.main:cli"
+
+[tool.setuptools.packages.find]
+where = ["."]
