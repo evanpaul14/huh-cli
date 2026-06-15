@@ -8,10 +8,9 @@ from pathlib import Path
 import click
 from rich.console import Console
 from rich.prompt import Confirm
-from rich.text import Text
 
-from .llm import suggest_fix, suggest_command
-from .shell import install_snippet
+from .llm import stream_fix, stream_command, _clean
+from .shell import install_snippet, remove_snippet
 
 console = Console()
 
@@ -40,12 +39,6 @@ def save_config(cfg: dict) -> None:
     CONFIG_PATH.write_text(json.dumps(cfg, indent=2))
 
 
-def _print_suggestion(suggestion: str) -> None:
-    arrow = Text("→ ", style="bold green")
-    cmd = Text(suggestion, style="bold cyan")
-    console.print(arrow + cmd)
-
-
 def _copy_to_clipboard(text: str) -> bool:
     import shutil
     try:
@@ -64,8 +57,22 @@ def _copy_to_clipboard(text: str) -> bool:
         return False
 
 
-def _act_on_suggestion(suggestion: str, copy: bool) -> None:
-    _print_suggestion(suggestion)
+def _stream_and_act(stream, copy: bool) -> None:
+    console.print("[bold green]→ [/bold green]", end="")
+
+    full_text = ""
+    for token in stream:
+        console.file.write(token)
+        console.file.flush()
+        full_text += token
+    console.file.write("\n")
+    console.file.flush()
+
+    suggestion = _clean(full_text)
+    if not suggestion:
+        console.print("[red]No suggestion returned.[/red]")
+        raise SystemExit(1)
+
     if copy:
         if _copy_to_clipboard(suggestion):
             console.print("[dim]Copied to clipboard.[/dim]")
@@ -102,14 +109,13 @@ def _run_fix_mode(cfg: dict, copy: bool = False) -> None:
         f"[dim](exit {last_exit})[/dim]"
     )
 
-    with console.status("[dim]thinking...[/dim]", spinner="dots"):
-        try:
-            suggestion = suggest_fix(last_cmd, int(last_exit), cfg, error_output=last_output)
-        except Exception as e:
-            console.print(f"[red]Error:[/red] {e}")
-            raise SystemExit(1)
-
-    _act_on_suggestion(suggestion, copy)
+    try:
+        _stream_and_act(stream_fix(last_cmd, int(last_exit), cfg, error_output=last_output), copy)
+    except SystemExit:
+        raise
+    except Exception as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise SystemExit(1)
 
 
 # ── commands ─────────────────────────────────────────────────────────────────
@@ -135,13 +141,13 @@ def ask(question: tuple[str, ...], copy: bool) -> None:
     """Ask for the command you need."""
     cfg = load_config()
     q = " ".join(question)
-    with console.status("[dim]thinking...[/dim]", spinner="dots"):
-        try:
-            suggestion = suggest_command(q, cfg)
-        except Exception as e:
-            console.print(f"[red]Error:[/red] {e}")
-            raise SystemExit(1)
-    _act_on_suggestion(suggestion, copy)
+    try:
+        _stream_and_act(stream_command(q, cfg), copy)
+    except SystemExit:
+        raise
+    except Exception as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise SystemExit(1)
 
 
 @cli.command()
@@ -154,6 +160,18 @@ def install() -> None:
     else:
         console.print(f"[green]✓[/green] Installed shell hook in [bold]{path}[/bold]")
         console.print(f"Run [bold]source {path}[/bold] (or open a new terminal) to activate.")
+
+
+@cli.command()
+def uninstall() -> None:
+    """Remove shell hook from ~/.zshrc or ~/.bashrc."""
+    shell = os.environ.get("SHELL", "")
+    removed, path = remove_snippet(shell)
+    if removed:
+        console.print(f"[green]✓[/green] Removed shell hook from [bold]{path}[/bold]")
+        console.print(f"Run [bold]source {path}[/bold] (or open a new terminal) to deactivate.")
+    else:
+        console.print(f"[yellow]Not installed[/yellow] — no huh hook found in {path}")
 
 
 @cli.command()

@@ -130,6 +130,21 @@ def _read_rc(rc_file: str) -> str:
         return ""
 
 
+def remove_snippet(shell: str) -> tuple[bool, str]:
+    """Returns (was_installed, rc_path). Strips any version of the huh hook."""
+    path = rc_path(shell)
+    contents = _read_rc(path)
+
+    if OLD_MARKER not in contents:
+        return False, path
+
+    old_re = _OLD_ZSH_RE if "zsh" in shell else _OLD_BASH_RE
+    stripped = old_re.sub("\n", contents).rstrip("\n") + "\n"
+    with open(path, "w") as f:
+        f.write(stripped)
+    return True, path
+
+
 def install_snippet(shell: str) -> tuple[bool, str]:
     """Returns (already_installed, rc_path)."""
     path = rc_path(shell)

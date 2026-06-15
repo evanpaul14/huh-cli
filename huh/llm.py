@@ -1,6 +1,8 @@
 import platform
 import re
 import sys
+from typing import Generator
+
 from .context import get_context
 
 
@@ -68,29 +70,28 @@ def _build_ask_messages(question: str, context: str) -> list[dict]:
     ]
 
 
-def _is_apple_silicon() -> bool:
-    return sys.platform == "darwin" and platform.machine() == "arm64"
+_EOS_TOKENS = ["<|im_end|>", "<|endoftext|>", "</s>", "<|eot_id|>"]
 
 
-def _run_mlx(messages: list[dict], model_id: str) -> str:
+def _run_mlx_stream(messages: list[dict], model_id: str) -> Generator[str, None, None]:
     import os as _os
     _os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
     _os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
     try:
-        from mlx_lm import load, generate  # type: ignore
+        from mlx_lm import load, stream_generate  # type: ignore
     except ImportError:
         raise RuntimeError("mlx-lm is not installed. Run: pip install mlx-lm")
 
     model, tokenizer = load(model_id)
-
     formatted = tokenizer.apply_chat_template(
         messages, add_generation_prompt=True, tokenize=False
     )
-
-    result = generate(model, tokenizer, prompt=formatted, max_tokens=128, verbose=False)
-    for tok in ["<|im_end|>", "<|endoftext|>", "</s>", "<|eot_id|>"]:
-        result = result.replace(tok, "")
-    return _clean(result)
+    for response in stream_generate(model, tokenizer, prompt=formatted, max_tokens=128):
+        text = response.text
+        for tok in _EOS_TOKENS:
+            text = text.replace(tok, "")
+        if text:
+            yield text
 
 
 _DEFAULT_GGUF_REPO = "bartowski/Qwen2.5-Coder-1.5B-Instruct-GGUF"
@@ -112,7 +113,7 @@ def _resolve_gguf_path(config: dict) -> str:
     return hf_hub_download(repo_id=repo, filename=filename)
 
 
-def _run_llama_cpp(messages: list[dict], config: dict) -> str:
+def _run_llama_cpp_stream(messages: list[dict], config: dict) -> Generator[str, None, None]:
     try:
         from llama_cpp import Llama  # type: ignore
     except ImportError:
@@ -124,28 +125,30 @@ def _run_llama_cpp(messages: list[dict], config: dict) -> str:
 
     model_path = _resolve_gguf_path(config)
     llm = Llama(model_path=model_path, n_ctx=2048, verbose=False, chat_format="chatml")
-    output = llm.create_chat_completion(messages=messages, max_tokens=128)
-    return _clean(output["choices"][0]["message"]["content"])
+    for chunk in llm.create_chat_completion(messages=messages, max_tokens=128, stream=True):
+        content = chunk["choices"][0]["delta"].get("content", "")
+        if content:
+            yield content
 
 
-def _get_suggestion(messages: list[dict], config: dict) -> str:
+def _stream_suggestion(messages: list[dict], config: dict) -> Generator[str, None, None]:
     backend = config.get("backend", "mlx")
     if backend == "mlx":
         model_id = config.get("model", "mlx-community/Qwen2.5-Coder-1.5B-Instruct-4bit")
-        return _run_mlx(messages, model_id)
+        yield from _run_mlx_stream(messages, model_id)
     elif backend == "llama_cpp":
-        return _run_llama_cpp(messages, config)
+        yield from _run_llama_cpp_stream(messages, config)
     else:
         raise RuntimeError(f"Unknown backend: {backend}")
 
 
-def suggest_fix(command: str, exit_code: int, config: dict, error_output: str = "") -> str:
+def stream_fix(command: str, exit_code: int, config: dict, error_output: str = "") -> Generator[str, None, None]:
     ctx = get_context()
     messages = _build_fix_messages(command, exit_code, ctx, error_output)
-    return _get_suggestion(messages, config)
+    yield from _stream_suggestion(messages, config)
 
 
-def suggest_command(question: str, config: dict) -> str:
+def stream_command(question: str, config: dict) -> Generator[str, None, None]:
     ctx = get_context()
     messages = _build_ask_messages(question, ctx)
-    return _get_suggestion(messages, config)
+    yield from _stream_suggestion(messages, config)
