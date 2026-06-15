@@ -181,8 +181,12 @@ def model(model_id: str | None) -> None:
     cfg = load_config()
     if model_id:
         cfg["model"] = model_id
+        if model_id.endswith(".gguf") or model_id.upper().endswith("-GGUF"):
+            cfg["backend"] = "llama_cpp"
+        elif model_id.startswith("mlx-community/") or "-4bit" in model_id or "-8bit" in model_id:
+            cfg["backend"] = "mlx"
         save_config(cfg)
-        console.print(f"[green]✓[/green] Model set to [bold]{model_id}[/bold]")
+        console.print(f"[green]✓[/green] Model set to [bold]{model_id}[/bold] [dim](backend: {cfg['backend']})[/dim]")
     else:
         console.print(f"Backend: [bold]{cfg.get('backend')}[/bold]")
         console.print(f"Model:   [bold]{cfg.get('model')}[/bold]")
