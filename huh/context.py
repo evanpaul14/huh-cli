@@ -5,12 +5,17 @@ import subprocess
 from pathlib import Path
 
 
-def _sample_path_binaries(max_count: int = 80) -> list[str]:
-    """Collect a deduplicated sample of binaries available on PATH."""
+_STANDARD_DIRS = frozenset(["/bin", "/usr/bin", "/sbin", "/usr/sbin", "/usr/local/bin"])
+
+
+def _sample_path_binaries(max_count: int = 45) -> list[str]:
+    """Collect binaries from non-standard PATH dirs; standard dirs are skipped since the model already knows their contents."""
     seen: set[str] = set()
     bins: list[str] = []
     for dir_str in os.environ.get("PATH", "").split(os.pathsep):
         d = Path(dir_str)
+        if str(d) in _STANDARD_DIRS:
+            continue
         if not d.is_dir():
             continue
         try:
