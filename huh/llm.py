@@ -123,7 +123,7 @@ def _run_llama_cpp(messages: list[dict], config: dict) -> str:
         )
 
     model_path = _resolve_gguf_path(config)
-    llm = Llama(model_path=model_path, n_ctx=512, verbose=False, chat_format="chatml")
+    llm = Llama(model_path=model_path, n_ctx=2048, verbose=False, chat_format="chatml")
     output = llm.create_chat_completion(messages=messages, max_tokens=128)
     return _clean(output["choices"][0]["message"]["content"])
 

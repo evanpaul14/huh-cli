@@ -1,7 +1,7 @@
 import re
 
 ZSH_SNIPPET = """
-# huh shell integration v3 — auto-capture failed commands + stderr
+# huh shell integration v4 — auto-capture failed commands + stderr
 _huh_preexec() {
   _HUH_LAST_CMD="$1"
   _HUH_STDERR_FILE="$(mktemp /tmp/.huh.XXXXXX 2>/dev/null || mktemp)"
@@ -46,29 +46,40 @@ precmd_functions+=(_huh_precmd)
 """
 
 BASH_SNIPPET = """
-# huh shell integration v3 — auto-capture failed commands + stderr
+# huh shell integration v4 — auto-capture failed commands + stderr
 _huh_stderr_file=""
+_huh_saved_stderr=""
+_huh_tee_pid=""
 _huh_preexec() {
+  [[ -n "${_huh_saved_stderr}" ]] && return
   _huh_stderr_file="$(mktemp /tmp/.huh.XXXXXX 2>/dev/null || mktemp)"
   export HUH_LAST_CMD="$BASH_COMMAND"
+  exec {_huh_saved_stderr}>&2
+  exec 2> >(tee "${_huh_stderr_file}" >&"${_huh_saved_stderr}")
+  _huh_tee_pid=$!
 }
 trap '_huh_preexec' DEBUG
-
-_huh_err_trap() {
-  export HUH_LAST_EXIT="$?"
-  if [[ -f "${_huh_stderr_file:-}" ]]; then
-    export HUH_LAST_OUTPUT="$(head -20 "${_huh_stderr_file}")"
-    rm -f "${_huh_stderr_file}"
-  fi
-}
-trap '_huh_err_trap' ERR
-
 _huh_precmd() {
-  [[ $? -eq 0 ]] && unset HUH_LAST_CMD HUH_LAST_EXIT HUH_LAST_OUTPUT
-  [[ -f "${_huh_stderr_file:-}" ]] && rm -f "${_huh_stderr_file}"
+  local code=$?
+  if [[ -n "${_huh_saved_stderr}" ]]; then
+    exec 2>&"${_huh_saved_stderr}" {_huh_saved_stderr}>&-
+    _huh_saved_stderr=""
+    [[ -n "${_huh_tee_pid}" ]] && wait "${_huh_tee_pid}" 2>/dev/null
+    _huh_tee_pid=""
+  fi
+  if [[ $code -ne 0 ]]; then
+    export HUH_LAST_EXIT="$code"
+    if [[ -f "${_huh_stderr_file}" ]]; then
+      export HUH_LAST_OUTPUT="$(head -20 "${_huh_stderr_file}")"
+      rm -f "${_huh_stderr_file}"
+    fi
+  else
+    unset HUH_LAST_CMD HUH_LAST_EXIT HUH_LAST_OUTPUT
+    [[ -f "${_huh_stderr_file}" ]] && rm -f "${_huh_stderr_file}"
+  fi
+  _huh_stderr_file=""
 }
 PROMPT_COMMAND="_huh_precmd${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
-
 command_not_found_handle() {
   export HUH_LAST_CMD="$1"
   export HUH_LAST_EXIT=127
@@ -78,14 +89,21 @@ command_not_found_handle() {
 }
 """
 
-MARKER = "# huh shell integration v3"
+MARKER = "# huh shell integration v4"
 OLD_MARKER = "# huh shell integration"
 
-# Matches the old v1 zsh block from its comment line through the last hook line
+# Match old snippet blocks (any version) by their unique terminal lines
 _OLD_ZSH_RE = re.compile(
-    r"\n# huh shell integration[^\n]*\n"     # header comment (any version)
-    r".*?"                                   # body
-    r"precmd_functions\+=\(_huh_precmd\)\n", # last line of old zsh snippet
+    r"\n# huh shell integration[^\n]*\n"
+    r".*?"
+    r"precmd_functions\+=\(_huh_precmd\)\n",
+    re.DOTALL,
+)
+
+_OLD_BASH_RE = re.compile(
+    r"\n# huh shell integration[^\n]*\n"
+    r".*?"
+    r'echo "bash: \$1: command not found" >&2\n  return 127\n}\n',
     re.DOTALL,
 )
 
@@ -122,9 +140,9 @@ def install_snippet(shell: str) -> tuple[bool, str]:
 
     snippet = get_snippet(shell)
 
-    # Upgrade: strip old v1 block and append new snippet
-    if OLD_MARKER in contents and "zsh" in shell:
-        stripped = _OLD_ZSH_RE.sub("\n", contents).rstrip("\n") + "\n"
+    if OLD_MARKER in contents:
+        old_re = _OLD_ZSH_RE if "zsh" in shell else _OLD_BASH_RE
+        stripped = old_re.sub("\n", contents).rstrip("\n") + "\n"
         with open(path, "w") as f:
             f.write(stripped)
             f.write(snippet)
